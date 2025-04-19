@@ -1,83 +1,96 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from sympy import symbols, diff, integrate, exp, sin, cos
+import matplotlib
+from mpl_toolkits.mplot3d import Axes3D
+import time
 
-# 设置页面标题
-st.title('微积分可视化平台')
+matplotlib.rcParams['font.family'] = 'SimHei'  # 黑体
+matplotlib.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 
-# 输入函数
-st.header('输入一个函数（例如：sin(x), x**2, exp(x)）')
-function_input = st.text_input('函数:', 'sin(x)')
+st.set_page_config(page_title="线性回归演示 Plus", layout="centered")
+st.title("📈 线性回归原理演示（动画 + 损失曲面）")
 
-# 解析输入的函数
-x = symbols('x')
-try:
-    func = eval(function_input)  # 使用eval将用户输入的字符串转为符号表达式
-except Exception as e:
-    st.error(f"输入的函数有误: {e}")
-    func = None
+# Sidebar - 模拟数据参数
+st.sidebar.header("🛠️ 数据生成参数")
+n_samples = st.sidebar.slider("样本数量", 10, 300, 50)
+true_w = st.sidebar.slider("真实权重 w", -10.0, 10.0, 2.0)
+true_b = st.sidebar.slider("真实偏置 b", -10.0, 10.0, 1.0)
+noise = st.sidebar.slider("噪声强度", 0.0, 5.0, 1.0)
 
-# 绘制图像
-if func:
-    st.header('函数图像')
+# 数据生成
+np.random.seed(42)
+X = np.linspace(-5, 5, n_samples)
+y_true = true_w * X + true_b + np.random.normal(0, noise, n_samples)
 
-    # 生成x的值
-    x_vals = np.linspace(-10, 10, 400)
-    y_vals = np.array([float(func.subs(x, val)) for val in x_vals])
+# 初始模型参数
+st.header("🔧 模型参数调整")
+w = st.slider("初始模型权重 (w)", -10.0, 10.0, 1.0)
+b = st.slider("初始模型偏置 (b)", -10.0, 10.0, 0.0)
+y_pred = w * X + b
+mse = np.mean((y_pred - y_true)**2)
+st.metric("当前模型 MSE", f"{mse:.4f}")
 
-    # 绘图
-    fig, ax = plt.subplots()
-    ax.plot(x_vals, y_vals, label=f'函数: {function_input}')
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.legend()
-    st.pyplot(fig)
+# 拟合图像
+fig, ax = plt.subplots()
+ax.scatter(X, y_true, label="真实数据", color="blue")
+ax.plot(X, y_pred, color="red", label="模型预测")
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_title("拟合曲线")
+ax.legend()
+st.pyplot(fig)
 
-# 导数可视化
-st.header('导数')
-if func:
-    try:
-        # 计算导数
-        derivative = diff(func, x)
-        st.write(f'导数: {derivative}')
+# 梯度下降参数
+st.header("📉 模拟训练过程（动画）")
+lr = st.number_input("学习率", 0.001, 1.0, 0.01)
+epochs = st.number_input("训练轮数", 1, 500, 100)
 
-        # 绘制导数图像
-        y_vals_derivative = np.array([float(derivative.subs(x, val)) for val in x_vals])
+if st.button("开始动画训练"):
+    w_train, b_train = w, b
+    history = []
+    plot_area = st.empty()
+    time.sleep(0.5)
 
+    for epoch in range(int(epochs)):
+        y_hat = w_train * X + b_train
+        loss = np.mean((y_hat - y_true) ** 2)
+        grad_w = np.mean(2 * (y_hat - y_true) * X)
+        grad_b = np.mean(2 * (y_hat - y_true))
+
+        w_train -= lr * grad_w
+        b_train -= lr * grad_b
+        history.append(loss)
+
+        # 绘图动画
         fig, ax = plt.subplots()
-        ax.plot(x_vals, y_vals_derivative, label=f'导数: {derivative}')
-        ax.set_xlabel('x')
-        ax.set_ylabel("f'(x)")
+        ax.scatter(X, y_true, color="blue", label="真实数据")
+        ax.plot(X, y_hat, color="orange", label=f"第 {epoch+1} 轮")
         ax.legend()
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"计算导数时出错: {e}")
+        ax.set_title(f"Epoch {epoch+1} | Loss: {loss:.4f}")
+        plot_area.pyplot(fig)
+        time.sleep(0.05)
 
-# 积分可视化
-st.header('定积分')
-if func:
-    try:
-        # 计算积分
-        integral = integrate(func, x)
-        st.write(f'不定积分: {integral}')
+    st.success(f"训练完成 🎉\n最终参数：w = {w_train:.4f}, b = {b_train:.4f}")
+    st.line_chart(history, height=300, use_container_width=True)
 
-        # 定积分计算
-        a = st.number_input('积分下限 a', -10, 10, -5)
-        b = st.number_input('积分上限 b', -10, 10, 5)
-        integral_value = float(integral.subs(x, b) - integral.subs(x, a))
-        st.write(f'定积分结果：∫{function_input}dx from {a} to {b} = {integral_value}')
+# 3D 曲面图
+st.header("🧊 损失函数曲面图（MSE）")
 
-        # 绘制积分区域
-        x_vals_integral = np.linspace(a, b, 400)
-        y_vals_integral = np.array([float(func.subs(x, val)) for val in x_vals_integral])
+# 生成网格参数
+W, B = np.meshgrid(np.linspace(-10, 10, 100), np.linspace(-10, 10, 100))
+Loss = np.zeros_like(W)
 
-        fig, ax = plt.subplots()
-        ax.plot(x_vals_integral, y_vals_integral, label=f'积分: {function_input}')
-        ax.fill_between(x_vals_integral, y_vals_integral, color='skyblue', alpha=0.4)
-        ax.set_xlabel('x')
-        ax.set_ylabel('f(x)')
-        ax.legend()
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"计算积分时出错: {e}")
+for i in range(W.shape[0]):
+    for j in range(W.shape[1]):
+        Y_pred = W[i, j] * X + B[i, j]
+        Loss[i, j] = np.mean((Y_pred - y_true) ** 2)
+
+fig = plt.figure(figsize=(8, 5))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(W, B, Loss, cmap='viridis', alpha=0.8)
+ax.set_xlabel('w')
+ax.set_ylabel('b')
+ax.set_zlabel('MSE')
+ax.set_title('损失曲面')
+st.pyplot(fig)
